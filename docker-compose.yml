@@ -1,0 +1,68 @@
+
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.3.0
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+
+  kafka:
+    image: confluentinc/cp-kafka:7.3.0
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    volumes:
+      - ./data:/app/data
+      - ./kafka:/app/kafka
+    environment:
+      KAFKA_ZOOKEEPER_CONNECT: "zookeeper:2181"
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
+  spark:
+    build: 
+      context: .  # Set context to root directory
+      dockerfile: ./spark/Dockerfile
+    depends_on:
+      - kafka
+      - mongodb
+    ports:
+      - "4040:4040"
+    volumes:
+      - ./ml_model:/app/ml_model   # Map ml_model directory correctly
+      - ./model:/app/model         # Map model directory 
+      - ./data:/app/data
+      - ./spark:/app/spark         # Map spark directory for code access
+    command: ["python", "/app/spark/spark_streaming.py"]  # Ensure correct path to script
+
+  mongodb:
+    build: ./mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+      MONGO_INITDB_DATABASE: reviews_db
+
+  web_app:
+    build: ./web_app
+    depends_on:
+      - mongodb
+      - spark
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./web_app:/app 
+    environment:
+      FLASK_ENV: development
+      MONGO_URI: "mongodb://reviews_user:secure_password@mongodb:27017/reviews_db?authSource=reviews_db"
+
+volumes:
+  mongodb_data:

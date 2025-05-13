@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reviews Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.4.1/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .review {
+            border-bottom: 1px solid #eee;
+            padding: 10px 0;
+        }
+        .positive {
+            color: green;
+        }
+        .negative {
+            color: red;
+        }
+        .neutral {
+            color: gray;
+        }
+        .stats {
+            display: flex;
+            justify-content: space-around;
+        }
+        .stat-box {
+            text-align: center;
+            padding: 10px;
+        }
+        canvas {
+            max-width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Amazon Reviews Dashboard</h1>
+
+        <div class="card">
+            <h2>Sentiment Statistics</h2>
+            <div class="stats">
+                <div class="stat-box">
+                    <h3>Positive</h3>
+                    <p id="positive-count">0</p>
+                </div>
+                <div class="stat-box">
+                    <h3>Neutral</h3>
+                    <p id="neutral-count">0</p>
+                </div>
+                <div class="stat-box">
+                    <h3>Negative</h3>
+                    <p id="negative-count">0</p>
+                </div>
+            </div>
+            <canvas id="sentimentChart"></canvas>
+        </div>
+
+        <div class="card">
+            <h2>Latest Reviews</h2>
+            <div id="reviews-container">
+                <p>Waiting for data...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+
+        socket.on('connect', function() {
+            console.log('Connected to server');
+            socket.emit('start_updates');
+        });
+
+        socket.on('update', function(data) {
+            updateStats(data.stats);
+            updateReviews(data.reviews);
+        });
+
+        function updateStats(stats) {
+            let positiveCount = stats.positive || 0;
+            let negativeCount = stats.negative || 0;
+            let neutralCount = stats.neutral || 0;
+
+            document.getElementById('positive-count').textContent = positiveCount;
+            document.getElementById('negative-count').textContent = negativeCount;
+            document.getElementById('neutral-count').textContent = neutralCount;
+
+            updateChart(positiveCount, negativeCount, neutralCount);
+        }
+
+        socket.on('update', function(data) {
+            updateStats(data.stats);
+            updateReviews(data.reviews);
+        });
+
+        function updateReviews(reviews) {
+            const container = document.getElementById('reviews-container');
+            
+            if (reviews.length === 0) {
+                container.innerHTML = '<p>No reviews available.</p>';
+                return;
+            }
+            
+            let html = '';
+            reviews.forEach(review => {
+                let sentimentClass = '';
+                if (review.sentiment === 'positive') {
+                    sentimentClass = 'positive';
+                } else if (review.sentiment === 'negative') {
+                    sentimentClass = 'negative';
+                } else {
+                    sentimentClass = 'neutral';
+                }
+                
+                html += `
+                    <div class="review">
+                        <p><strong>Review:</strong> ${review.reviewText}</p>
+                        <p><strong>Sentiment:</strong> <span class="${sentimentClass}">${review.sentiment}</span></p>
+                        <p><small>Timestamp: ${new Date(review.timestamp * 1000).toLocaleString()}</small></p>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+        }
+
+        let sentimentChart = null;
+
+        function updateChart(positive, neutral, negative) {
+            if (sentimentChart) {
+                sentimentChart.destroy();
+            }
+
+            const ctx = document.getElementById('sentimentChart').getContext('2d');
+            sentimentChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['Positive', 'Neutral', 'Negative'],
+                    datasets: [{
+                        label: '# of Reviews',
+                        data: [positive, neutral, negative],
+                        backgroundColor: [
+                            'rgba(75, 192, 192, 0.7)',
+                            'rgba(201, 203, 207, 0.7)',
+                            'rgba(255, 99, 132, 0.7)'
+                        ]
+                    }]
+                }
+            });
+        }
+
+
+        socket.on('error', function(data) {
+            console.error('Server error:', data.message);
+        });
+    </script>
+</body>
+</html>
